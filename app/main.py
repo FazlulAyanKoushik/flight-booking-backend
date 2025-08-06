@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from app.routers import health, auth
 import subprocess
 from sqlalchemy.future import select
-from app.db import async_session
+from app.db import async_session, initialize_db
 from app.models.user import User
 from app.schemas.user import RoleEnum
 from app.services import auth as auth_service
@@ -13,6 +13,9 @@ app = FastAPI()
 async def on_startup():
     # Run alembic upgrade head
     subprocess.run(["alembic", "upgrade", "head"])
+    
+    # Initialize database connection
+    await initialize_db()
 
     # Ensure at least one admin user exists
     async with async_session() as session:

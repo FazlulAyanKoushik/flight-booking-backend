@@ -1,7 +1,5 @@
 from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
@@ -55,7 +53,29 @@ def run_migrations_offline() -> None:
 
 
 import asyncio
+import time
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
+
+async def create_engine_with_retry(url, max_retries=10, retry_interval=2):
+    """Create a database engine with retry logic for PostgreSQL connections"""
+    for attempt in range(max_retries):
+        try:
+            engine = create_async_engine(url, poolclass=pool.NullPool)
+            # Test the connection
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+            print(f"Alembic: Database connection established successfully on attempt {attempt + 1}")
+            return engine
+        except OperationalError as e:
+            if attempt < max_retries - 1:
+                print(f"Alembic: Database connection attempt {attempt + 1} failed: {str(e)}")
+                print(f"Alembic: Retrying in {retry_interval} seconds...")
+                await asyncio.sleep(retry_interval)
+            else:
+                print(f"Alembic: Failed to connect to database after {max_retries} attempts")
+                raise
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode with async engine."""
@@ -65,16 +85,22 @@ def run_migrations_online() -> None:
         # fallback to your app's db.py logic
         from app.db import DATABASE_URL
         url = DATABASE_URL
-    connectable = create_async_engine(url, poolclass=pool.NullPool)
+    
+    async def get_connectable():
+        # Use retry logic for database connection
+        return await create_engine_with_retry(url)
+    
+    # Run the async function to get the connectable with retry logic
+    connectable = asyncio.run(get_connectable())
+
+    def run_migrations(sync_conn):
+        context.configure(connection=sync_conn, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
 
     async def run_async_migrations():
         async with connectable.connect() as connection:
-            await connection.run_sync(
-                lambda sync_conn: context.configure(
-                    connection=sync_conn, target_metadata=target_metadata
-                )
-            )
-            await connection.run_sync(lambda _: context.run_migrations())
+            await connection.run_sync(run_migrations)
 
     asyncio.run(run_async_migrations())
 
