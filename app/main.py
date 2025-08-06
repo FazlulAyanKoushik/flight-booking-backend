@@ -1,6 +1,10 @@
-def main():
-    print("Hello from flight-booking-backend!")
+from fastapi import FastAPI
+from app.routers import health
 
+app = FastAPI()
 
-if __name__ == "__main__":
-    main()
+app.include_router(health.router)
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World from FastAPI!"}
