@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   app:
     build: .
@@ -12,6 +11,8 @@ services:
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       - db
+    networks:
+      - flight_app_network
 
   db:
     image: postgres:15
@@ -21,8 +22,15 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - flight_app_network
+
 volumes:
   postgres_data:
+
+networks:
+  flight_app_network:
+    driver: bridge
